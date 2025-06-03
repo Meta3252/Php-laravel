@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Task;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+
+
 class TaskController extends Controller
 {
     public function index(Request $request)
@@ -19,8 +22,34 @@ class TaskController extends Controller
 
         $tasks = $query->orderBy('startTime')->get();
 
-        return view('tasks.index', compact('tasks'));
+        $summary = null;
+        if ($request->filled('month')) {
+            try {
+                $startOfMonth = Carbon::createFromFormat('Y-m', $request->month)->startOfMonth();
+                $endOfMonth = $startOfMonth->copy()->endOfMonth();
+
+                $allowedStatuses = ['ดำเนินการ', 'เสร็จสิ้น', 'ยกเลิก'];
+
+                $summary = Task::whereBetween('startTime', [$startOfMonth, $endOfMonth])
+                    ->whereIn('status', $allowedStatuses)
+                    ->select('status', DB::raw('COUNT(*) as count'))
+                    ->groupBy('status')
+                    ->pluck('count', 'status')
+                    ->toArray();
+
+                foreach ($allowedStatuses as $status) {
+                    if (!isset($summary[$status])) {
+                        $summary[$status] = 0;
+                    }
+                }
+            } catch (\Exception $e) {
+                $summary = null;
+            }
+        }
+
+        return view('tasks.index', compact('tasks', 'summary'));
     }
+
 
 
     public function create()
